@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Excalidraw } from '@excalidraw/excalidraw'
 import { useStore } from '../store/useStore'
 import { setGlobalExcalidrawAPI } from '../hooks/useMenuHandler'
-import { serializeExcalidrawScene } from '../lib/excalidrawScene'
 import { TIMING } from '../constants'
 import type { OpenTab } from '../types'
 
@@ -21,6 +20,7 @@ function EditorPane({ tab, isActive, presentationMode }: EditorPaneProps) {
   const initialLoadCompleteRef = useRef(false)
   const isUserChangeRef = useRef(false)
   const lastSavedElementsRef = useRef(JSON.stringify(tab.cachedScene.elements || []))
+  const lastSceneVersionRef = useRef<number | null>(null)
   const hasCenteredInitialContentRef = useRef(false)
   const centerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const centerChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -130,27 +130,15 @@ function EditorPane({ tab, isActive, presentationMode }: EditorPaneProps) {
       return
     }
 
-    const currentElements = JSON.stringify(elements || [])
-
-    if (currentElements === lastSavedElementsRef.current) {
+    // Cheap change signal: Excalidraw bumps appState.sceneVersion on every
+    // scene mutation. Unchanged frames (pure pointer/hover noise) cost ~nothing.
+    const sceneVersion = typeof appState.sceneVersion === 'number' ? appState.sceneVersion : null
+    if (sceneVersion !== null && sceneVersion === lastSceneVersionRef.current) {
       return
     }
+    lastSceneVersionRef.current = sceneVersion
 
-    lastSavedElementsRef.current = currentElements
-
-    const store = useStore.getState()
-    if (!store.isDirty) {
-      store.setIsDirty(true)
-      store.markFileAsModified(tab.path, true)
-      store.markTreeNodeAsModified(tab.path, true)
-    }
-
-    const newContent = serializeExcalidrawScene(elements, appState, files)
-
-    const freshStore = useStore.getState()
-    if (freshStore.activeFile?.path === tab.path) {
-      freshStore.setFileContent(newContent)
-    }
+    useStore.getState().queueSceneChange(tab.path, elements, appState, files)
   }, [isActive, tab.path])
 
   return (
