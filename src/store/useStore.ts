@@ -127,6 +127,7 @@ interface AppStore {
   setFileContent: (content: string | null) => void
   updateTabScene: (filePath: string, scene: CachedExcalidrawScene) => void
   setPreferences: (prefs: Preferences) => void
+  setTheme: (theme: 'light' | 'dark' | 'system') => void
   setSidebarVisible: (visible: boolean) => void
   setIsDirty: (dirty: boolean) => void
   markFileAsModified: (filePath: string, modified: boolean) => void
@@ -150,6 +151,14 @@ interface AppStore {
   loadPreferences: () => Promise<void>
   savePreferences: () => Promise<void>
   toggleSidebar: () => void
+}
+
+function applyThemeClass(theme: Preferences['theme']) {
+  const root = document.documentElement
+  const isDark =
+    theme === 'dark' ||
+    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  root.classList.toggle('dark', isDark)
 }
 
 export const useStore = create<AppStore>((set, get) => ({
@@ -194,6 +203,13 @@ export const useStore = create<AppStore>((set, get) => ({
     ),
   })),
   setPreferences: (prefs) => set({ preferences: prefs }),
+  setTheme: (theme) => {
+    const state = get()
+    const newPrefs = { ...state.preferences, theme }
+    set({ preferences: newPrefs })
+    applyThemeClass(theme)
+    state.savePreferences()
+  },
   setSidebarVisible: (visible) => set({ sidebarVisible: visible }),
   setIsDirty: (dirty) => set({ isDirty: dirty }),
   
@@ -774,22 +790,9 @@ export const useStore = create<AppStore>((set, get) => ({
         invoke('set_decorations', { visible: false })
       }
 
-      // Apply theme
-      const root = document.documentElement
-      if (safePrefs.theme === 'dark') {
-        root.classList.add('dark')
-      } else if (safePrefs.theme === 'light') {
-        root.classList.remove('dark')
-      } else {
-        // System theme
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-        if (prefersDark) {
-          root.classList.add('dark')
-        } else {
-          root.classList.remove('dark')
-        }
-      }
-      
+      // Apply app chrome theme
+      applyThemeClass(safePrefs.theme)
+
       // Auto-load last directory if it exists
       if (safePrefs.lastDirectory) {
         try {

@@ -28,6 +28,7 @@ export function useMenuHandler() {
     toggleSidebar,
     preferences,
     savePreferences,
+    setTheme,
   } = useStore()
 
   // Use the global reference instead of a local one
@@ -101,6 +102,19 @@ export function useMenuHandler() {
             handleToggleFullscreen()
             break
 
+          // Theme menu commands (app chrome only)
+          case 'theme_light':
+            setTheme('light')
+            break
+
+          case 'theme_dark':
+            setTheme('dark')
+            break
+
+          case 'theme_system':
+            setTheme('system')
+            break
+
           // Window menu commands
           case 'minimize':
             await getCurrentWindow().minimize()
@@ -137,6 +151,7 @@ export function useMenuHandler() {
     toggleSidebar,
     preferences,
     savePreferences,
+    setTheme,
   ])
 
   // File menu handlers
