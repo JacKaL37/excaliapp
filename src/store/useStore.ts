@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 import { CachedExcalidrawScene, ExcalidrawFile, FileTreeNode, OpenTab, Preferences } from '../types'
 import { convertPreferencesFromRust, convertPreferencesToRust } from '../lib/preferences'
+import { serializeExcalidrawScene } from '../lib/excalidrawScene'
 import { ask } from '@tauri-apps/plugin-dialog'
 
 type UnsavedChangesDecision = 'save' | 'discard' | 'cancel'
@@ -125,6 +126,9 @@ interface AppStore {
   setFileTree: (tree: FileTreeNode[]) => void
   setActiveFile: (file: ExcalidrawFile | null) => void
   setFileContent: (content: string | null) => void
+  queueSceneChange: (path: string, elements: readonly any[], appState: any, files: any) => void
+  flushPendingSync: (path: string) => void
+  cancelPendingSync: (path: string) => void
   updateTabScene: (filePath: string, scene: CachedExcalidrawScene) => void
   setPreferences: (prefs: Preferences) => void
   setTheme: (theme: 'light' | 'dark' | 'system') => void
@@ -159,6 +163,35 @@ function applyThemeClass(theme: Preferences['theme']) {
     theme === 'dark' ||
     (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   root.classList.toggle('dark', isDark)
+}
+
+// Pending content-sync state, keyed by file path. Kept OUTSIDE reactive
+// state: it holds timers and only the active tab ever queues a sync
+// (handleChange is gated on isActive).
+const pendingSyncs = new Map<
+  string,
+  {
+    timer: ReturnType<typeof setTimeout> | null
+    elements: readonly any[]
+    appState: any
+    files: any
+  }
+>()
+
+export const SYNC_DEBOUNCE_MS = 300
+
+function applyPendingSync(get: () => AppStore, path: string) {
+  const pending = pendingSyncs.get(path)
+  if (!pending) return
+  if (pending.timer !== null) {
+    clearTimeout(pending.timer)
+  }
+  pendingSyncs.delete(path)
+
+  const content = serializeExcalidrawScene(pending.elements, pending.appState, pending.files)
+  if (get().activeFile?.path === path) {
+    get().setFileContent(content)
+  }
 }
 
 export const useStore = create<AppStore>((set, get) => ({
@@ -197,6 +230,35 @@ export const useStore = create<AppStore>((set, get) => ({
           )
         : state.openTabs,
   })),
+
+  queueSceneChange: (path, elements, appState, files) => {
+    const state = get()
+    if (!state.isDirty) {
+      state.setIsDirty(true)
+      state.markFileAsModified(path, true)
+      state.markTreeNodeAsModified(path, true)
+    }
+
+    const existing = pendingSyncs.get(path)
+    if (existing && existing.timer !== null) {
+      clearTimeout(existing.timer)
+    }
+
+    const timer = setTimeout(() => applyPendingSync(get, path), SYNC_DEBOUNCE_MS)
+    pendingSyncs.set(path, { timer, elements, appState, files })
+  },
+
+  flushPendingSync: (path) => {
+    applyPendingSync(get, path)
+  },
+
+  cancelPendingSync: (path) => {
+    const pending = pendingSyncs.get(path)
+    if (pending && pending.timer !== null) {
+      clearTimeout(pending.timer)
+    }
+    pendingSyncs.delete(path)
+  },
   updateTabScene: (filePath, scene) => set((state) => ({
     openTabs: state.openTabs.map((tab) =>
       tab.path === filePath ? { ...tab, cachedScene: scene } : tab
