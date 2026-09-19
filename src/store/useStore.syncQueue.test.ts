@@ -70,4 +70,17 @@ describe('scene sync queue', () => {
 
     expect(useStore.getState().fileContent).toBe('{}')
   })
+
+  it('saveCurrentFile flushes pending content before saving', async () => {
+    const { invoke } = await import('@tauri-apps/api/core')
+
+    useStore.getState().queueSceneChange(path, elements, appState, {})
+    await useStore.getState().saveCurrentFile()
+
+    expect(invoke).toHaveBeenCalledWith('save_file', {
+      filePath: path,
+      content: expect.stringContaining('"elements"'),
+    })
+    expect(useStore.getState().isDirty).toBe(false)
+  })
 })

@@ -391,6 +391,7 @@ export const useStore = create<AppStore>((set, get) => ({
         return
       } else {
         try {
+          get().cancelPendingSync(state.activeFile.path)
           const existingTab = get().openTabs.find((tab) => tab.path === state.activeFile?.path)
           const cleanTab = await readOpenTabFromDisk(
             state.activeFile,
@@ -497,7 +498,7 @@ export const useStore = create<AppStore>((set, get) => ({
   // Save current file
   saveCurrentFile: async (content) => {
     const state = get()
-    const { activeFile, fileContent, isDirty } = state
+    const { activeFile, isDirty } = state
     
     if (!activeFile) {
       return
@@ -507,8 +508,10 @@ export const useStore = create<AppStore>((set, get) => ({
     if (!isDirty && !content) {
       return
     }
+    // Apply any pending debounced content so the save captures the latest state
+    get().flushPendingSync(activeFile.path)
     
-    const contentToSave = content || fileContent
+    const contentToSave = content || get().fileContent
     if (!contentToSave) {
       return
     }
@@ -574,6 +577,7 @@ export const useStore = create<AppStore>((set, get) => ({
         return
       } else {
         try {
+          get().cancelPendingSync(state.activeFile.path)
           const existingTab = get().openTabs.find((tab) => tab.path === state.activeFile?.path)
           const cleanTab = await readOpenTabFromDisk(
             state.activeFile,
@@ -962,6 +966,7 @@ export const useStore = create<AppStore>((set, get) => ({
         return
       } else {
         try {
+          get().cancelPendingSync(state.activeFile.path)
           const existingTab = get().openTabs.find((tab) => tab.path === state.activeFile?.path)
           const cleanTab = await readOpenTabFromDisk(
             state.activeFile,
