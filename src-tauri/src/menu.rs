@@ -150,6 +150,14 @@ fn create_view_menu<R: Runtime>(
         .accelerator("F11")
         .build(app)?;
 
+    let separator3 = PredefinedMenuItem::separator(app)?;
+
+    let theme_menu = SubmenuBuilder::new(app, "Theme")
+        .item(&MenuItemBuilder::with_id("theme_light", "Light").build(app)?)
+        .item(&MenuItemBuilder::with_id("theme_dark", "Dark").build(app)?)
+        .item(&MenuItemBuilder::with_id("theme_system", "System").build(app)?)
+        .build()?;
+
     let view_menu = SubmenuBuilder::new(app, "View")
         .items(&[
             &toggle_sidebar,
@@ -159,6 +167,8 @@ fn create_view_menu<R: Runtime>(
             &reset_zoom,
             &separator2,
             &fullscreen,
+            &separator3,
+            &theme_menu,
         ])
         .build()?;
 
