@@ -188,10 +188,12 @@ function applyPendingSync(get: () => AppStore, path: string) {
   }
   pendingSyncs.delete(path)
 
-  const content = serializeExcalidrawScene(pending.elements, pending.appState, pending.files)
-  if (get().activeFile?.path === path) {
-    get().setFileContent(content)
+  if (get().activeFile?.path !== path) {
+    return
   }
+
+  const content = serializeExcalidrawScene(pending.elements, pending.appState, pending.files)
+  get().setFileContent(content)
 }
 
 export const useStore = create<AppStore>((set, get) => ({
@@ -391,7 +393,6 @@ export const useStore = create<AppStore>((set, get) => ({
         return
       } else {
         try {
-          get().cancelPendingSync(state.activeFile.path)
           const existingTab = get().openTabs.find((tab) => tab.path === state.activeFile?.path)
           const cleanTab = await readOpenTabFromDisk(
             state.activeFile,
@@ -409,6 +410,7 @@ export const useStore = create<AppStore>((set, get) => ({
           }))
           state.markFileAsModified(cleanTab.path, false)
           state.markTreeNodeAsModified(cleanTab.path, false)
+          get().cancelPendingSync(state.activeFile.path)
         } catch (error) {
           console.error('Failed to discard unsaved changes:', error)
           alert(`Failed to discard unsaved changes: ${error}`)
@@ -540,18 +542,20 @@ export const useStore = create<AppStore>((set, get) => ({
         content: contentToSave,
       })
       
-      state.markFileAsModified(activeFile.path, false)
-      state.markTreeNodeAsModified(activeFile.path, false)
+      // A change queued while the save was in flight keeps the file dirty
+      const hasPending = pendingSyncs.has(activeFile.path)
+      state.markFileAsModified(activeFile.path, hasPending)
+      state.markTreeNodeAsModified(activeFile.path, hasPending)
       set((currentState) => ({
-        isDirty: false,
-        activeFile: { ...activeFile, modified: false },
+        isDirty: hasPending,
+        activeFile: { ...activeFile, modified: hasPending },
         openTabs: currentState.openTabs.map((tab) =>
           tab.path === activeFile.path
             ? {
                 ...tab,
                 cachedContent: contentToSave,
                 contentHash,
-                modified: false,
+                modified: hasPending,
               }
             : tab
         ),
@@ -577,7 +581,6 @@ export const useStore = create<AppStore>((set, get) => ({
         return
       } else {
         try {
-          get().cancelPendingSync(state.activeFile.path)
           const existingTab = get().openTabs.find((tab) => tab.path === state.activeFile?.path)
           const cleanTab = await readOpenTabFromDisk(
             state.activeFile,
@@ -595,6 +598,7 @@ export const useStore = create<AppStore>((set, get) => ({
           }))
           state.markFileAsModified(cleanTab.path, false)
           state.markTreeNodeAsModified(cleanTab.path, false)
+          get().cancelPendingSync(state.activeFile.path)
         } catch (error) {
           console.error('Failed to discard unsaved changes:', error)
           alert(`Failed to discard unsaved changes: ${error}`)
@@ -966,7 +970,6 @@ export const useStore = create<AppStore>((set, get) => ({
         return
       } else {
         try {
-          get().cancelPendingSync(state.activeFile.path)
           const existingTab = get().openTabs.find((tab) => tab.path === state.activeFile?.path)
           const cleanTab = await readOpenTabFromDisk(
             state.activeFile,
@@ -984,6 +987,7 @@ export const useStore = create<AppStore>((set, get) => ({
           }))
           state.markFileAsModified(cleanTab.path, false)
           state.markTreeNodeAsModified(cleanTab.path, false)
+          get().cancelPendingSync(state.activeFile.path)
         } catch (error) {
           console.error('Failed to discard unsaved changes:', error)
           alert(`Failed to discard unsaved changes: ${error}`)

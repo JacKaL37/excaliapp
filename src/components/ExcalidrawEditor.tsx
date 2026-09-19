@@ -3,6 +3,7 @@ import { Excalidraw } from '@excalidraw/excalidraw'
 import { useStore } from '../store/useStore'
 import { setGlobalExcalidrawAPI } from '../hooks/useMenuHandler'
 import { TIMING } from '../constants'
+import { classifySceneVersion, currentSceneVersion } from '../lib/sceneVersion'
 import type { OpenTab } from '../types'
 
 type ExcalidrawElement = any
@@ -19,7 +20,6 @@ function EditorPane({ tab, isActive, presentationMode }: EditorPaneProps) {
   const excalidrawAPIRef = useRef<any>(null)
   const initialLoadCompleteRef = useRef(false)
   const isUserChangeRef = useRef(false)
-  const lastSavedElementsRef = useRef(JSON.stringify(tab.cachedScene.elements || []))
   const lastSceneVersionRef = useRef<number | null>(null)
   const hasCenteredInitialContentRef = useRef(false)
   const centerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -99,44 +99,27 @@ function EditorPane({ tab, isActive, presentationMode }: EditorPaneProps) {
     }
   }, [clearCenterTimers])
 
-  useEffect(() => {
-    const unsubscribe = useStore.subscribe((state, prevState) => {
-      const wasSaved =
-        prevState.activeFile?.path === tab.path &&
-        state.activeFile?.path === tab.path &&
-        prevState.isDirty &&
-        !state.isDirty
-
-      if (wasSaved && state.fileContent) {
-        try {
-          const data = JSON.parse(state.fileContent)
-          lastSavedElementsRef.current = JSON.stringify(data.elements || [])
-        } catch {
-          // Ignore parse errors.
-        }
-      }
-    })
-
-    return unsubscribe
-  }, [tab.path])
-
   const handleChange = useCallback((
     elements: readonly ExcalidrawElement[],
     appState: ExcalidrawAppState,
     files: any
   ) => {
     if (!isActive || !isUserChangeRef.current || !initialLoadCompleteRef.current) {
-      lastSavedElementsRef.current = JSON.stringify(elements || [])
       return
     }
 
-    // Cheap change signal: Excalidraw bumps appState.sceneVersion on every
-    // scene mutation. Unchanged frames (pure pointer/hover noise) cost ~nothing.
-    const sceneVersion = typeof appState.sceneVersion === 'number' ? appState.sceneVersion : null
-    if (sceneVersion !== null && sceneVersion === lastSceneVersionRef.current) {
+    // Cheap change signal: getSceneVersion sums element versions (O(n) integer
+    // math). The first tracked frame seeds the ref without queueing, because
+    // Excalidraw bumps element versions during restore.
+    const nextVersion = currentSceneVersion(elements)
+    const verdict = classifySceneVersion(lastSceneVersionRef.current, nextVersion)
+    if (verdict === 'unchanged') {
       return
     }
-    lastSceneVersionRef.current = sceneVersion
+    lastSceneVersionRef.current = nextVersion
+    if (verdict === 'seed') {
+      return
+    }
 
     useStore.getState().queueSceneChange(tab.path, elements, appState, files)
   }, [isActive, tab.path])

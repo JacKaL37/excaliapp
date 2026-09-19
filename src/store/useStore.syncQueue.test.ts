@@ -3,7 +3,7 @@ import { useStore, SYNC_DEBOUNCE_MS } from './useStore'
 
 const path = 'C:/drawings/test.excalidraw'
 const elements = [{ id: 'e1', type: 'rectangle', version: 1 }]
-const appState = { sceneVersion: 5, theme: 'light' }
+const appState = { theme: 'light' }
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -82,5 +82,25 @@ describe('scene sync queue', () => {
       content: expect.stringContaining('"elements"'),
     })
     expect(useStore.getState().isDirty).toBe(false)
+  })
+
+  it('re-marks dirty when a change is queued while a save is in flight', async () => {
+    const { invoke } = await import('@tauri-apps/api/core')
+
+    let resolveSave: (value: unknown) => void
+    ;(invoke as any).mockImplementationOnce(() => new Promise((r) => { resolveSave = r }))
+
+    useStore.setState({ isDirty: false })
+    useStore.getState().queueSceneChange(path, elements, appState, {})
+
+    const savePromise = useStore.getState().saveCurrentFile()
+
+    // While the save awaits, another change is queued
+    useStore.getState().queueSceneChange(path, elements, { ...appState }, {})
+    resolveSave!('hash123')
+
+    await savePromise
+
+    expect(useStore.getState().isDirty).toBe(true)
   })
 })
