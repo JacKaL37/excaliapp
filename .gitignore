@@ -27,3 +27,6 @@ dist-ssr
 # Mac App Store build inputs generated from local credentials.
 src-tauri/Entitlements.mas.generated.plist
 src-tauri/embedded.provisionprofile
+
+# Agent directories and files
+.claude/
